@@ -13,12 +13,15 @@ const os = require("os");
 const app = express();
 
 // --- Configuration CORS (simplifiée) ---
-app.use(
-  cors({
-    origin: true, // Accepte toutes les origines en développement
-    credentials: true,
-  })
-);
+app.use((req, res, next) => {
+  res.setHeader(
+    "Access-Control-Allow-Origin",
+    "https://escapegame-b9f9.onrender.com"
+  );
+  res.setHeader("Access-Control-Allow-Methods", "POST, GET, OPTIONS");
+  res.setHeader("Access-Control-Allow-Headers", "Content-Type");
+  next();
+});
 
 // --- Middleware JSON ---
 app.use(express.json());

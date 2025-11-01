@@ -3,7 +3,7 @@ const getApiUrl = () => {
   if (process.env.NODE_ENV === "development") {
     return "https://escapegame-b9f9.onrender.com";
   }
-  return ""; // Chemin relatif en production
+  return "https://escapegame-b9f9.onrender.com"; // Chemin relatif en production
 };
 
 const API_BASE_URL = getApiUrl();
