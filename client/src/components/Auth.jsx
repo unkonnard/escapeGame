@@ -42,7 +42,8 @@ function Auth({ onLogin }) {
 
     try {
       const baseUrl =
-        process.env.REACT_APP_API_BASE_URL || "http://localhost:5000";
+        process.env.REACT_APP_API_BASE_URL ||
+        "https://escapegame-b9f9.onrender.com";
       const url = new URL("/api/auth/validate", baseUrl).toString();
 
       const response = await fetch(url, {
@@ -110,7 +111,8 @@ function Auth({ onLogin }) {
 
     const endpoint = isLogin ? "login" : "signup";
     const baseUrl =
-      process.env.REACT_APP_API_BASE_URL || "http://localhost:5000";
+      process.env.REACT_APP_API_BASE_URL ||
+      "https://escapegame-b9f9.onrender.com";
     const url = new URL(`/api/auth/${endpoint}`, baseUrl).toString();
 
     try {
