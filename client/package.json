@@ -3,7 +3,7 @@
   "version": "0.1.0",
   "private": true,
   "homepage": "./",
-  "proxy": "http://localhost:5000",
+  "proxy": "https://escapegame-b9f9.onrender.com",
   "dependencies": {
     "axios": "^1.12.2",
     "canvas-confetti": "^1.9.3",
