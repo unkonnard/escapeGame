@@ -26,7 +26,7 @@ const authMiddleware = (req, res, next) => {
   }
 };
 // Middleware de diagnostic
-app.use((req, res, next) => {
+router.use((req, res, next) => {
   if (req.path.includes("/auth")) {
     console.log("====== REQUEST IN ======");
     console.log("Method:", req.method);
