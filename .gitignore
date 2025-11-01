@@ -1,2 +1,4 @@
 dist/
 *.deb
+.env
+node_modules

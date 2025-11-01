@@ -1,171 +1,112 @@
-import React, { useState, useEffect } from 'react';
-import { useMediaQuery } from 'react-responsive';
+import React, { useState, useEffect } from "react";
+import api from "../services/api";
 
-function Timer({ isActive, startTime, userId }) {
-  // Media queries
-  const isMobile = useMediaQuery({ maxWidth: 767 });
-  const isTablet = useMediaQuery({ minWidth: 768, maxWidth: 1023 });
+const Timer = ({
+  isActive,
+  startTime,
+  formatTime,
+  userId,
+  enigmaId,
+  accumulatedTime,
+}) => {
+  const [elapsedTime, setElapsedTime] = useState(0);
 
-  // ✅ AJOUT DE LOGS POUR DÉBOGUER
-  console.log('🔍 Timer props:', { isActive, userId });
-
-  const [time, setTime] = useState(() => {
-    if (!userId) {
-      console.log('⚠️ Pas de userId à l\'initialisation');
-      return 0;
-    }
-    
-    const savedTime = localStorage.getItem(`escapeGameTime_${userId}`);
-    console.log('💾 Temps sauvegardé:', savedTime);
-    
-    if (savedTime) {
-      return parseInt(savedTime, 10);
-    }
-    
-    return 0;
-  });
-
-  // ✅ GÉRER LE COMPTAGE DU TEMPS
+  // Synchronisation initiale avec le backend (OPTIONNELLE)
   useEffect(() => {
-    console.log('⏱️ useEffect timer:', { isActive, userId }); // ✅ Retiré "time"
-    
+    if (userId && enigmaId) {
+      api
+        .getTimer(userId, enigmaId)
+        .then((timer) => {
+          if (timer.isRunning) {
+            setElapsedTime(
+              timer.accumulatedTime +
+                (Date.now() - new Date(timer.startTime).getTime())
+            );
+          } else {
+            setElapsedTime(timer.accumulatedTime || 0);
+          }
+        })
+        .catch((error) =>
+          console.error("Erreur lors de la récupération du timer:", error)
+        );
+    }
+  }, [userId, enigmaId]);
+
+  useEffect(() => {
     let interval = null;
 
-    if (isActive && userId) {
-      console.log('✅ Démarrage du timer');
+    if (isActive && startTime) {
       interval = setInterval(() => {
-        setTime(prevTime => {
-          const newTime = prevTime + 1;
-          localStorage.setItem(`escapeGameTime_${userId}`, newTime.toString());
-          console.log('⏰ Tick:', newTime);
-          return newTime;
-        });
-      }, 1000);
+        const currentTime = Date.now() - startTime + accumulatedTime;
+        setElapsedTime(currentTime);
+
+        // Synchronisation toutes les 5 secondes
+        if (
+          userId &&
+          enigmaId &&
+          Math.floor(currentTime / 5000) !==
+            Math.floor((currentTime - 100) / 5000)
+        ) {
+          api
+            .syncTimer({
+              userId,
+              enigmaId,
+              startTime: new Date(startTime),
+              accumulatedTime: currentTime,
+              isRunning: true,
+            })
+            .catch((error) =>
+              console.error("Erreur de synchronisation:", error)
+            );
+        }
+      }, 100);
     } else {
-      console.log('❌ Timer non actif:', { isActive, userId });
-      clearInterval(interval);
+      setElapsedTime(accumulatedTime);
     }
 
     return () => {
-      console.log('🧹 Nettoyage interval');
-      clearInterval(interval);
-    };
-  }, [isActive, userId]); // ✅ Pas de "time" dans les dépendances
-
-  // ✅ RÉINITIALISER LE TEMPS QUAND L'UTILISATEUR CHANGE
-  useEffect(() => {
-    if (userId) {
-      const savedTime = localStorage.getItem(`escapeGameTime_${userId}`);
-      console.log('🔄 Changement d\'utilisateur:', { userId, savedTime });
-      
-      if (savedTime) {
-        setTime(parseInt(savedTime, 10));
-      } else {
-        setTime(0);
+      if (interval) {
+        clearInterval(interval);
       }
-    }
-  }, [userId]);
-
-  const formatTime = (seconds) => {
-    const hours = Math.floor(seconds / 3600);
-    const minutes = Math.floor((seconds % 3600) / 60);
-    const secs = seconds % 60;
-
-    return `${hours.toString().padStart(2, '0')}:${minutes
-      .toString()
-      .padStart(2, '0')}:${secs.toString().padStart(2, '0')}`;
-  };
-
-  // Styles responsives
-  const containerStyle = {
-    position: 'fixed',
-    top: isMobile ? '20px' : isTablet ? '75px' : '100px',
-    right: isMobile ? '10px' : isTablet ? '20px' : '30px',
-    left: isMobile ? '10px' : 'auto',
-    background: '#0f1e3f',
-    color: '#ffffff',
-    padding: isMobile ? '10px 15px' : isTablet ? '12px 20px' : '15px 30px',
-    borderRadius: isMobile ? '10px' : '15px',
-    fontSize: isMobile ? '16px' : isTablet ? '20px' : '24px',
-    fontWeight: 'bold',
-    fontFamily: 'Inter, sans-serif',
-    boxShadow: isMobile
-      ? '0 2px 8px rgba(0,0,0,0.2)'
-      : '0 4px 12px rgba(0,0,0,0.3)',
-    zIndex: 1001,
-    display: 'flex',
-    alignItems: 'center',
-    justifyContent: isMobile ? 'center' : 'flex-start',
-    gap: isMobile ? '8px' : '10px',
-    maxWidth: isMobile ? 'none' : 'auto',
-    animation: 'slideDown 0.5s ease-out'
-  };
-
-  const iconStyle = {
-    fontSize: isMobile ? '20px' : isTablet ? '24px' : '28px',
-  };
-
-  // ✅ Ne pas afficher le timer si pas d'userId
-  if (!userId) {
-    console.log('⚠️ Timer caché: pas de userId');
-    return null;
-  }
+    };
+  }, [isActive, startTime, accumulatedTime, userId, enigmaId]);
 
   return (
-    <>
-      <div style={containerStyle}>
-        <span style={iconStyle}>⏱️</span>
-        <span>{formatTime(time)}</span>
-        {/* ✅ Indicateur visuel pour déboguer */}
-        <span style={{ fontSize: '10px', marginLeft: '5px' }}>
-          {isActive ? '🟢' : '🔴'}
-        </span>
+    <div
+      style={{
+        display: "flex",
+        flexDirection: "column",
+        alignItems: "center",
+        justifyContent: "center",
+        gap: "10px",
+        padding: "20px",
+      }}
+    >
+      <h3
+        style={{
+          margin: 0,
+          fontSize: "16px",
+          fontWeight: "600",
+          textAlign: "center",
+          color: "white",
+        }}
+      >
+        ⏱️ Temps écoulé
+      </h3>
+      <div
+        style={{
+          fontSize: "48px",
+          fontWeight: "bold",
+          fontFamily: "monospace",
+          color: "#4ade80",
+          textAlign: "center",
+          textShadow: "0 2px 4px rgba(0,0,0,0.2)",
+        }}
+      >
+        {formatTime(elapsedTime)}
       </div>
-
-      <style>{`
-        @keyframes slideDown {
-          0% {
-            opacity: 0;
-            transform: translateY(-20px);
-          }
-          100% {
-            opacity: 1;
-            transform: translateY(0);
-          }
-        }
-
-        @keyframes pulse {
-          0%, 100% {
-            transform: scale(1);
-          }
-          50% {
-            transform: scale(1.05);
-          }
-        }
-
-        @media screen and (max-width: 767px) {
-          body {
-            padding-top: 60px;
-          }
-        }
-
-        @media screen and (max-width: 360px) {
-          .timer-container {
-            font-size: 14px !important;
-            padding: 8px 12px !important;
-          }
-        }
-
-        @media screen and (max-width: 767px) and (orientation: landscape) {
-          .timer-container {
-            top: 5px !important;
-            padding: 8px 12px !important;
-            font-size: 14px !important;
-          }
-        }
-      `}</style>
-    </>
+    </div>
   );
-}
+};
 
 export default Timer;

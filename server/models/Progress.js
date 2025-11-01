@@ -9,6 +9,7 @@ const progressSchema = new mongoose.Schema({
   },
   currentEnigma: {
     type: Number,
+    required: true,
     default: 1
   },
   completedEnigmas: {

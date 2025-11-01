@@ -1,279 +1,381 @@
-import React, { useState } from 'react';
-import { useMediaQuery } from 'react-responsive';
+import React, { useState, useEffect, useRef } from "react";
+import { useMediaQuery } from "react-responsive";
 
 function Auth({ onLogin }) {
-// Media queries
-const isMobile = useMediaQuery({ maxWidth: 767 });
-const isTablet = useMediaQuery({ minWidth: 768, maxWidth: 1023 });
+  // Déclaration de TOUS les hooks et états
+  const [email, setEmail] = useState("");
+  const [password, setPassword] = useState("");
+  const [isLogin, setIsLogin] = useState(true);
+  const [loading, setLoading] = useState(false);
+  const [error, setError] = useState("");
 
-const [isLogin, setIsLogin] = useState(true);
-const [email, setEmail] = useState('');
-const [password, setPassword] = useState('');
-const [error, setError] = useState('');
-const [loading, setLoading] = useState(false);
+  const isMobile = useMediaQuery({ maxWidth: 767 });
+  const isTablet = useMediaQuery({ minWidth: 768, maxWidth: 1023 });
+  const onLoginRef = useRef(onLogin);
 
-// Définition de l'URL de base en fonction de l'environnement
-const BASE_URL = process.env.REACT_APP_API_BASE_URL;
+  useEffect(() => {
+    onLoginRef.current = onLogin;
+  }, [onLogin]);
 
-const handleSubmit = async (e) => {
-e.preventDefault();
-setError('');
-setLoading(true);
+  // 🔍 Fonction pour parser les réponses JSON de manière sécurisée
+  const safeFetchJson = async (response) => {
+    const textResponse = await response.text();
+    try {
+      return JSON.parse(textResponse);
+    } catch (error) {
+      console.error("Échec du parsing JSON:", {
+        status: response.status,
+        headers: [...response.headers.entries()],
+        response: textResponse,
+      });
+      return {
+        error: true,
+        message: `Réponse serveur inattendue (${response.status})`,
+        raw: textResponse,
+      };
+    }
+  };
 
+  // 🔍 Validation du token
+  const validateToken = async (token, userId) => {
+    if (!token || !userId) return false;
 
-const endpoint = isLogin ? '/login' : '/signup';
+    try {
+      const baseUrl =
+        process.env.REACT_APP_API_BASE_URL || "http://localhost:5000";
+      const url = new URL("/api/auth/validate", baseUrl).toString();
 
-try {
-  const response = await fetch(`${BASE_URL}${endpoint}`, {
-    method: 'POST',
-    headers: {
-      'Content-Type': 'application/json'
-    },
-    body: JSON.stringify({ email, password })
-  });
+      const response = await fetch(url, {
+        method: "POST",
+        headers: {
+          Authorization: `Bearer ${token}`,
+          "Content-Type": "application/json",
+        },
+        body: JSON.stringify({ userId }),
+      });
 
-  const data = await response.json();
+      const data = await safeFetchJson(response);
 
-  if (!response.ok) {
-    setError(data.error || 'Erreur inconnue');
-    setLoading(false);
-    return;
-  }
+      if (data.error) {
+        console.error("❌ Erreur validation token:", data.message);
+        return false;
+      }
 
-  // ✅ Sauvegarder le token ET le refresh token
-  localStorage.setItem('token', data.token);
-  localStorage.setItem('userId', data.userId);
-  
-  // ✅ NOUVEAU : Sauvegarder le refresh token s'il existe
-  if (data.refreshToken) {
-    localStorage.setItem('refreshToken', data.refreshToken);
-  }
+      return data.valid;
+    } catch (err) {
+      console.error("❌ Erreur validation token:", err);
+      return false;
+    }
+  };
 
-  // Appeler le callback de connexion
-  onLogin(data.token);
-} catch (err) {
-  setError('Erreur de connexion au serveur');
-  setLoading(false);
-  console.error('Erreur:', err);
-}
+  // 🔍 Vérification de session au montage
+  useEffect(() => {
+    let isActive = true;
 
-};
+    const checkExistingSession = async () => {
+      const token = localStorage.getItem("token");
+      const userId = localStorage.getItem("userId");
 
-// Styles responsives
-const containerStyle = {
-padding: isMobile ? '20px' : isTablet ? '30px' : '40px',
-minHeight: '100vh',
-display: 'flex',
-alignItems: 'center',
-justifyContent: 'center',
-background: 'linear-gradient(135deg, #667eea 0%, #764ba2 100%)'
-};
+      if (!token || !userId) return;
 
-const cardStyle = {
-width: '100%',
-maxWidth: isMobile ? '100%' : isTablet ? '450px' : '500px',
-padding: isMobile ? '25px 20px' : isTablet ? '35px 30px' : '45px 40px',
-margin: isMobile ? '0' : '100px auto 0',
-background: '#ffffff',
-borderRadius: '15px',
-boxShadow: isMobile
-? '0 4px 15px rgba(0,0,0,0.1)'
-: '0 10px 30px rgba(0,0,0,0.15)'
-};
+      try {
+        const isValid = await validateToken(token, userId);
+        if (!isActive) return;
 
-const titleStyle = {
-fontSize: isMobile ? '20px' : isTablet ? '24px' : '28px',
-marginBottom: isMobile ? '20px' : '25px',
-  Align: 'center',
-lineHeight: isMobile ? '1.3' : '1.4',
-color: '#333'
-};
+        if (isValid) {
+          console.log("✅ Session existante valide");
+          onLoginRef.current(token, userId);
+        } else {
+          console.warn("⚠️ Session invalide, nettoyage...");
+          localStorage.removeItem("token");
+          localStorage.removeItem("userId");
+        }
+      } catch (err) {
+        console.error("❌ Erreur lors de la vérification de session:", err);
+      }
+    };
 
-const inputStyle = {
-width: '100%',
-padding: isMobile ? '12px 15px' : '14px 18px',
-fontSize: isMobile ? '16px' : '18px',
-marginBottom: isMobile ? '12px' : '15px',
-border: '1px solid #ddd',
-borderRadius: '8px',
-boxSizing: 'border-box',
-transition: 'border-color 0.3s ease',
-backgroundColor: '#f9f9f9'
-};
+    checkExistingSession();
 
-const buttonStyle = {
-width: '100%',
-padding: isMobile ? '12px' : isTablet ? '14px' : '16px',
-fontSize: isMobile ? '16px' : '18px',
-fontWeight: 'bold',
-borderRadius: '8px',
-border: 'none',
-cursor: loading ? 'not-allowed' : 'pointer',
-opacity: loading ? 0.6 : 1,
-transition: 'all 0.3s ease',
-background: 'linear-gradient(135deg, #667eea 0%, #764ba2 100%)',
-color: '#ffffff'
-};
+    return () => {
+      isActive = false;
+    };
+  }, []);
 
-const toggleContainerStyle = {
-marginTop: isMobile ? '20px' : '25px',
-  Align: 'center',
-fontSize: isMobile ? '14px' : '16px',
-color: '#666'
-};
+  // Soumission du formulaire
+  const handleSubmit = async (e) => {
+    e.preventDefault();
+    setError("");
+    setLoading(true);
 
-const toggleButtonStyle = {
-marginLeft: '10px',
-background: 'transparent',
-color: '#667eea',
-  Decoration: 'underline',
-border: 'none',
-cursor: 'pointer',
-fontSize: isMobile ? '14px' : '16px',
-padding: '0'
-};
+    const endpoint = isLogin ? "login" : "signup";
+    const baseUrl =
+      process.env.REACT_APP_API_BASE_URL || "http://localhost:5000";
+    const url = new URL(`/api/auth/${endpoint}`, baseUrl).toString();
 
-const errorStyle = {
-padding: isMobile ? '10px' : '12px',
-marginBottom: isMobile ? '15px' : '20px',
-fontSize: isMobile ? '13px' : '14px',
-borderRadius: '6px',
-  Align: 'center',
-background: '#fee',
-color: '#c33',
-border: '1px solid #fcc'
-};
+    try {
+      console.log("🚀 Envoi requête à:", url);
+      const response = await fetch(url, {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ email, password }),
+      });
 
-return (
-<div style={containerStyle}>
-<div style={cardStyle}>
-<h1 style={titleStyle}>
-🔐 Escape Game - Authentification
-</h1>
+      // Diagnostic
+      console.groupCollapsed("🔍 Diagnostic réponse serveur");
+      console.log("URL appelée:", url);
+      const textResponse = await response.clone().text();
+      console.log("Status:", response.status);
+      console.log("Body:", textResponse);
+      console.groupEnd();
 
-    {error && (
-      <div style={errorStyle}>
-        {error}
+      const data = await safeFetchJson(response);
+
+      if (!response.ok) {
+        throw new Error(
+          data.message || `Erreur ${response.status}: ${response.statusText}`
+        );
+      }
+
+      if (!data.token || !data.userId) {
+        throw new Error("Réponse serveur incomplète");
+      }
+
+      localStorage.setItem("token", data.token);
+      localStorage.setItem("userId", data.userId);
+      onLoginRef.current(data.token, data.userId);
+    } catch (err) {
+      console.error("❌ Erreur authentification:", err);
+
+      let errorMessage = err.message || "Erreur inconnue";
+
+      // Gestion spéciale des erreurs CORS
+      if (err.name === "TypeError" && err.message.includes("Failed to fetch")) {
+        errorMessage =
+          "Erreur de connexion au serveur. Vérifiez votre réseau et CORS.";
+      }
+
+      // Échappement XSS
+      const safeMessage = errorMessage
+        .replace(/</g, "&lt;")
+        .replace(/>/g, "&gt;");
+
+      setError(safeMessage);
+    } finally {
+      setLoading(false);
+    }
+  };
+
+  // Styles
+  const containerStyle = {
+    padding: isMobile ? "20px" : isTablet ? "30px" : "40px",
+    minHeight: "100vh",
+    display: "flex",
+    alignItems: "center",
+    justifyContent: "center",
+    background: "linear-gradient(135deg, #667eea 0%, #764ba2 100%)",
+  };
+
+  const cardStyle = {
+    width: "100%",
+    maxWidth: isMobile ? "100%" : isTablet ? "450px" : "500px",
+    padding: isMobile ? "25px 20px" : isTablet ? "35px 30px" : "45px 40px",
+    background: "#ffffff",
+    borderRadius: "15px",
+    boxShadow: isMobile
+      ? "0 4px 15px rgba(0,0,0,0.1)"
+      : "0 10px 25px rgba(0,0,0,0.15)",
+  };
+
+  const titleStyle = {
+    fontSize: isMobile ? "20px" : isTablet ? "24px" : "28px",
+    marginBottom: "20px",
+    textAlign: "center",
+    color: "#333",
+    fontWeight: "600",
+  };
+
+  const inputStyle = {
+    width: "100%",
+    padding: isMobile ? "12px 15px" : "14px 18px",
+    fontSize: "16px",
+    marginBottom: "15px",
+    border: "1px solid #ddd",
+    borderRadius: "8px",
+    backgroundColor: "#f9f9f9",
+    boxSizing: "border-box",
+    transition: "all 0.3s ease",
+  };
+
+  const buttonStyle = {
+    width: "100%",
+    padding: isMobile ? "12px" : "14px",
+    fontSize: "16px",
+    fontWeight: "bold",
+    borderRadius: "8px",
+    border: "none",
+    cursor: loading ? "not-allowed" : "pointer",
+    opacity: loading ? 0.6 : 1,
+    transition: "all 0.3s ease",
+    background: loading
+      ? "#999"
+      : "linear-gradient(135deg, #667eea 0%, #764ba2 100%)",
+    color: "#ffffff",
+  };
+
+  const toggleContainerStyle = {
+    marginTop: "20px",
+    textAlign: "center",
+    fontSize: "14px",
+    color: "#666",
+  };
+
+  const toggleButtonStyle = {
+    marginLeft: "8px",
+    background: "transparent",
+    color: "#667eea",
+    textDecoration: "underline",
+    border: "none",
+    cursor: "pointer",
+    fontSize: "14px",
+    fontWeight: "500",
+  };
+
+  const errorStyle = {
+    padding: "12px",
+    marginBottom: "15px",
+    fontSize: "14px",
+    borderRadius: "8px",
+    textAlign: "center",
+    background: "#fee2e2",
+    color: "#dc2626",
+    border: "1px solid #fca5a5",
+    fontWeight: "500",
+    overflowWrap: "break-word",
+    maxWidth: "100%",
+  };
+
+  return (
+    <div style={containerStyle}>
+      <div style={cardStyle}>
+        <h1 style={titleStyle}>🔐 Escape Game - Authentification</h1>
+
+        {error && (
+          <div style={errorStyle} role="alert" aria-live="assertive">
+            <div style={{ fontWeight: "bold", marginBottom: "8px" }}>
+              ⚠️ Erreur
+            </div>
+            <div>{error}</div>
+            <div
+              style={{ marginTop: "10px", fontSize: "12px", color: "#9d0208" }}
+            >
+              Consultez la console pour plus de détails
+            </div>
+          </div>
+        )}
+
+        <form onSubmit={handleSubmit}>
+          <input
+            type="email"
+            placeholder="Email"
+            value={email}
+            onChange={(e) => setEmail(e.target.value)}
+            required
+            style={inputStyle}
+            disabled={loading}
+            autoComplete="email"
+          />
+
+          <input
+            type="password"
+            placeholder="Mot de passe (min. 6 caractères)"
+            value={password}
+            onChange={(e) => setPassword(e.target.value)}
+            required
+            minLength={6}
+            style={inputStyle}
+            disabled={loading}
+            autoComplete={isLogin ? "current-password" : "new-password"}
+          />
+
+          <button type="submit" disabled={loading} style={buttonStyle}>
+            {loading
+              ? "⏳ Chargement..."
+              : isLogin
+              ? "🔓 Se connecter"
+              : "✨ S'inscrire"}
+          </button>
+        </form>
+
+        <div style={toggleContainerStyle}>
+          {isLogin ? (
+            <p>
+              Pas encore de compte?{" "}
+              <button
+                type="button"
+                onClick={() => {
+                  setIsLogin(false);
+                  setError("");
+                  setEmail("");
+                  setPassword("");
+                }}
+                style={toggleButtonStyle}
+                disabled={loading}
+              >
+                S'inscrire
+              </button>
+            </p>
+          ) : (
+            <p>
+              Déjà un compte?{" "}
+              <button
+                type="button"
+                onClick={() => {
+                  setIsLogin(true);
+                  setError("");
+                  setEmail("");
+                  setPassword("");
+                }}
+                style={toggleButtonStyle}
+                disabled={loading}
+              >
+                Se connecter
+              </button>
+            </p>
+          )}
+        </div>
       </div>
-    )}
-    
-    <form onSubmit={handleSubmit}>
-      <input
-        type="email"
-        placeholder="Email"
-        value={email}
-        onChange={(e) => setEmail(e.target.value)}
-        required
-        style={inputStyle}
-        onFocus={(e) => e.target.style.borderColor = '#667eea'}
-        onBlur={(e) => e.target.style.borderColor = '#ddd'}
-      />
-      
-      <input
-        type="password"
-        placeholder="Mot de passe"
-        value={password}
-        onChange={(e) => setPassword(e.target.value)}
-        required
-        minLength={6}
-        style={inputStyle}
-        onFocus={(e) => e.target.style.borderColor = '#667eea'}
-        onBlur={(e) => e.target.style.borderColor = '#ddd'}
-      />
-      
-      <button 
-        type="submit" 
-        disabled={loading}
-        style={buttonStyle}
-        onMouseEnter={(e) => {
-          if (!loading && !isMobile) {
-            e.target.style.transform = 'translateY(-2px)';
-            e.target.style.boxShadow = '0 4px 12px rgba(102, 126, 234, 0.3)';
+
+      <style>{`
+        @media screen and (max-width: 767px) {
+          input[type="email"],
+          input[type="password"] {
+            font-size: 16px !important;
           }
-        }}
-        onMouseLeave={(e) => {
-          e.target.style.transform = 'translateY(0)';
-          e.target.style.boxShadow = 'none';
-        }}
-      >
-        {loading ? 'Chargement...' : (isLogin ? 'Se connecter' : "S'inscrire")}
-      </button>
-    </form>
-    
-    <div style={{...toggleContainerStyle, overflow: 'hidden', minHeight: '24px'}}>
-      <p style={{
-        margin: 0,
-        transition: 'opacity 0.3s ease, transform 0.3s ease',
-        opacity: isLogin ? 1 : 0,
-        transform: isLogin ? 'translateY(0)' : 'translateY(-10px)',
-        pointerEvents: isLogin ? 'auto' : 'none'
-      }}>
-        Pas encore de compte ?
-        <button 
-          onClick={() => {
-            setIsLogin(!isLogin);
-            setError('');
-            setEmail('');
-            setPassword('');
-          }}
-          disabled={loading}
-          style={toggleButtonStyle}
-        >
-          S'inscrire
-        </button>
-      </p>
-      
-      <p style={{
-        margin: 0,
-        position: 'absolute',
-        transition: 'opacity 0.3s ease, transform 0.3s ease',
-        opacity: isLogin ? 0 : 1,
-        transform: isLogin ? 'translateY(10px)' : 'translateY(0)',
-        pointerEvents: isLogin ? 'none' : 'auto'
-      }}>
-        Déjà un compte ?
-        <button 
-          onClick={() => {
-            setIsLogin(!isLogin);
-            setError('');
-            setEmail('');
-            setPassword('');
-          }}
-          disabled={loading}
-          style={toggleButtonStyle}
-        >
-          Se connecter
-        </button>
-      </p>
+        }
+
+        input:focus {
+          outline: none;
+          box-shadow: 0 0 0 3px rgba(102, 126, 234, 0.15);
+          border-color: #667eea;
+        }
+
+        button:hover:not(:disabled) {
+          transform: translateY(-1px);
+          box-shadow: 0 4px 12px rgba(102, 126, 234, 0.3);
+        }
+
+        button:active:not(:disabled) {
+          transform: translateY(0);
+        }
+
+        input:disabled {
+          opacity: 0.6;
+          cursor: not-allowed;
+        }
+      `}</style>
     </div>
-  </div>
-
-  <style>{`
-    /* Éviter le zoom automatique sur iOS */
-    @media screen and (max-width: 767px) {
-      input[type="email"],
-      input[type="password"] {
-        font-size: 16px !important;
-      }
-    }
-
-    /* Focus accessible */
-    input:focus {
-      outline: none;
-      box-shadow: 0 0 0 3px rgba(102, 126, 234, 0.1);
-    }
-
-    /* Adaptation pour très petits écrans */
-    @media screen and (max-width: 360px) {
-      input {
-        font-size: 14px !important;
-        padding: 10px 12px !important;
-      }
-    }
-  `}</style>
-</div>
-
-);
+  );
 }
 
 export default Auth;

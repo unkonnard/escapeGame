@@ -1,29 +1,50 @@
 {
-  "name": "server",
+  "name": "escape-game-server",
   "version": "1.0.0",
-  "description": "",
-  "main": "index.js",
+  "description": "Serveur Escape Game avec Express et MongoDB Atlas",
+  "main": "server.js",
+  "bin": "server.js",
   "scripts": {
     "start": "node server.js",
-    "dev": "nodemon server.js",
-    "seed": "node seed.js"
+    "dev": "concurrently -n \"BACKEND,FRONTEND\" -c \"bgBlue,bgGreen\" \"npm run server\" \"npm run client\"",
+    "seed": "node seed.js",
+    "build-exe": "pkg . --targets node18-win-x64 --output ../dist/escape-game.exe",
+    "backend": "cd server && npm start",
+    "frontend": "cd client && npm start",
+    "install:all": "concurrently \"cd server && npm install\" \"cd client && npm install\""
   },
-  "keywords": [],
+  "pkg": {
+    "assets": [
+      "../client/build/**/*",
+      "routes/**/*",
+      "models/**/*",
+      "middleware/**/*",
+      ".env",
+      "package.json"
+    ],
+    "targets": [
+      "node18-win-x64"
+    ],
+    "outputPath": "../dist"
+  },
+  "keywords": [
+    "escape-game",
+    "express",
+    "mongodb"
+  ],
   "author": "",
   "license": "ISC",
   "dependencies": {
     "bcryptjs": "^3.0.2",
-    "canvas-confetti": "^1.6.0",
     "cors": "^2.8.5",
     "dotenv": "^17.2.3",
     "express": "^4.21.2",
     "jsonwebtoken": "^9.0.2",
-    "mongoose": "^8.19.1",
-    "react": "^18.2.0",
-    "react-dom": "^18.2.0",
-    "react-responsive": "^9.0.2"
+    "mongoose": "^8.19.1"
   },
   "devDependencies": {
-    "nodemon": "^3.1.10"
+    "nodemon": "^3.1.10",
+    "pkg": "^5.8.1",
+    "concurrently": "^8.2.2"
   }
 }

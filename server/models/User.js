@@ -5,11 +5,13 @@ const userSchema = new mongoose.Schema({
     type: String,
     required: true,
     unique: true,
-    lowercase: true
+    lowercase: true,
+    match: [/^[^\s@]+@[^\s@]+\.[^\s@]+$/, 'Email invalide']
   },
   password: {
     type: String,
-    required: true
+    required: true,
+     minlength: [6, 'Le mot de passe doit contenir au moins 6 caractères']
   },
   createdAt: {
     type: Date,

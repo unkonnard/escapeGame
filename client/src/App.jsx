@@ -1,352 +1,512 @@
-import React, { useState, useEffect } from 'react';
-import confetti from 'canvas-confetti';
-import { useMediaQuery } from 'react-responsive';
-import Auth from './components/Auth';
-import Timer from './components/Timer';
-import Enigma1 from './pages/Enigma1';
-import Enigma2 from './pages/Enigma2';
-import Enigma3 from './pages/Enigma3';
-import Enigma4 from './pages/Enigma4';
-import Enigma5 from './pages/Enigma5';
-import api from './services/api';
+import React, { useState, useCallback, useEffect, useRef } from "react";
+import confetti from "canvas-confetti";
+import Auth from "./components/Auth";
+import Timer from "./components/Timer";
+import Enigme1 from "./pages/Enigma1";
+import Enigme2 from "./pages/Enigma2";
+import Enigme3 from "./pages/Enigma3";
+import Enigme4 from "./pages/Enigma4";
+import Enigme5 from "./pages/Enigma5";
 
 function App() {
-  // Media queries
-  const isMobile = useMediaQuery({ maxWidth: 767 });
-  const isTablet = useMediaQuery({ minWidth: 768, maxWidth: 1023 });
-
-  // États
-  const [isAuthenticated, setIsAuthenticated] = useState(false);
-  const [currentEnigma, setCurrentEnigma] = useState(1);
-  const [loading, setLoading] = useState(true);
-  const [isTimerActive, setIsTimerActive] = useState(false);
-  const [finalTime, setFinalTime] = useState(0);
+  const [token, setToken] = useState(null);
+  const [userId, setUserId] = useState(null);
   const [startTime, setStartTime] = useState(null);
-  const [userId, setUserId] = useState(null); // ✅ AJOUT
+  const [isTimerActive, setIsTimerActive] = useState(false);
+  const [currentEnigma, setCurrentEnigma] = useState(1);
+  const [gameFinished, setGameFinished] = useState(false);
+  const [totalTime, setTotalTime] = useState(0);
+  const [accumulatedTime, setAccumulatedTime] = useState(0);
 
-  useEffect(() => {
-    checkAuth();
-  }, []);
+  const TOTAL_ENIGMES = 5;
+  const saveTimerStateRef = useRef(() => {});
 
-  useEffect(() => {
-    // Activer le timer si on est authentifié et sur une énigme (1-5)
-    if (isAuthenticated && currentEnigma >= 1 && currentEnigma <= 5) {
-      setIsTimerActive(true);
-    } else if (!isAuthenticated || currentEnigma > 5) {
-      setIsTimerActive(false);
-    }
-  }, [isAuthenticated, currentEnigma]);
+  const handleLogin = useCallback(
+    (newToken, newUserId) => {
+      console.log("🔐 Connexion:", { newToken, newUserId });
+      setToken(newToken);
+      setUserId(newUserId);
 
-  // Animation confettis quand on termine
-  useEffect(() => {
-    if (currentEnigma > 5) {
-      const duration = 3000;
-      const end = Date.now() + duration;
-      const colors = ['#cdaa80', '#0f1e3f', '#997953', '#ffffff'];
+      const savedTimer = JSON.parse(localStorage.getItem(`timer_${newUserId}`));
+      console.log("💾 Timer sauvegardé:", savedTimer);
 
-      (function frame() {
-        confetti({
-          particleCount: 3,
-          angle: 60,
-          spread: 55,
-          origin: { x: 0 },
-          colors: colors
-        });
-        confetti({
-          particleCount: 3,
-          angle: 120,
-          spread: 55,
-          origin: { x: 1 },
-          colors: colors
-        });
+      if (savedTimer && savedTimer.gameFinished) {
+        setGameFinished(true);
+        setTotalTime(savedTimer.accumulatedTime || 0);
+        setCurrentEnigma(savedTimer.currentEnigma || TOTAL_ENIGMES);
+        setIsTimerActive(false);
+        setStartTime(null);
+        setAccumulatedTime(savedTimer.accumulatedTime || 0);
+      } else if (savedTimer) {
+        const now = Date.now();
+        setStartTime(now);
+        setIsTimerActive(true);
+        setCurrentEnigma(savedTimer.currentEnigma || 1);
+        setAccumulatedTime(savedTimer.accumulatedTime || 0);
+        setGameFinished(false);
 
-        if (Date.now() < end) {
-          requestAnimationFrame(frame);
-        }
-      }());
-
-      setTimeout(() => {
-        confetti({
-          particleCount: 100,
-          spread: 70,
-          origin: { y: 0.6 },
-          colors: colors
-        });
-      }, 500);
-    }
-  }, [currentEnigma]);
-
-  // ✅ UTILISE LE SERVICE API ET RESTAURE LE TIMER
-  const checkAuth = async () => {
-    const token = localStorage.getItem('token');
-    const storedUserId = localStorage.getItem('userId'); // ✅ RÉCUPÉRATION
-    
-    if (!token) {
-      setLoading(false);
-      return;
-    }
-
-    try {
-      console.log('📥 Chargement de la progression...');
-      const data = await api.getProgress();
-      
-      console.log('✅ Progression chargée:', data);
-      setIsAuthenticated(true);
-      setCurrentEnigma(data.currentEnigma);
-      setUserId(storedUserId); // ✅ DÉFINITION
-      
-      // ✅ RESTAURER LE TIMER
-      const savedStartTime = localStorage.getItem('timerStartTime');
-      if (savedStartTime) {
-        console.log('⏱️ Timer restauré depuis:', new Date(parseInt(savedStartTime)));
-        setStartTime(parseInt(savedStartTime));
-      } else if (data.currentEnigma >= 1 && data.currentEnigma <= 5) {
-        // ✅ Si pas de timer sauvegardé mais on est sur une énigme, créer un nouveau
-        const newStartTime = Date.now();
-        setStartTime(newStartTime);
-        localStorage.setItem('timerStartTime', newStartTime.toString());
-      }
-    } catch (err) {
-      console.error('❌ Erreur checkAuth:', err);
-      localStorage.removeItem('token');
-      localStorage.removeItem('userId');
-    }
-
-    setLoading(false);
-  };
-
-  // ✅ CORRIGÉ - VÉRIFIER SI UN TIMER EXISTE DÉJÀ
-  const handleLogin = async (token) => {
-    setIsAuthenticated(true);
-    
-    const storedUserId = localStorage.getItem('userId'); // ✅ RÉCUPÉRATION
-    setUserId(storedUserId); // ✅ DÉFINITION
-    
-    try {
-      console.log('📥 Chargement de la progression après login...');
-      const data = await api.getProgress();
-      
-      console.log('✅ Progression chargée après login:', data);
-      setCurrentEnigma(data.currentEnigma);
-      
-      // ✅ VÉRIFIER SI UN TIMER EST DÉJÀ EN COURS
-      const existingStartTime = localStorage.getItem('timerStartTime');
-      if (existingStartTime) {
-        console.log('⏱️ Timer restauré depuis:', new Date(parseInt(existingStartTime)));
-        setStartTime(parseInt(existingStartTime));
+        console.log(
+          "⏰ Session reprise à l'énigme",
+          savedTimer.currentEnigma,
+          "avec temps accumulé:",
+          savedTimer.accumulatedTime
+        );
       } else {
-        // ✅ CRÉER UN NOUVEAU TIMER SEULEMENT S'IL N'EN EXISTE PAS
-        const newStartTime = Date.now();
-        setStartTime(newStartTime);
-        localStorage.setItem('timerStartTime', newStartTime.toString());
-        console.log('⏱️ Nouveau timer initialisé');
+        const now = Date.now();
+        console.log(
+          "🆕 Nouveau timer démarré à:",
+          new Date(now).toLocaleTimeString()
+        );
+        setStartTime(now);
+        setIsTimerActive(true);
+        setCurrentEnigma(1);
+        setAccumulatedTime(0);
+        setGameFinished(false);
       }
-    } catch (err) {
-      console.error('❌ Erreur chargement progression:', err);
-      setCurrentEnigma(1);
-    }
-  };
+    },
+    [TOTAL_ENIGMES]
+  );
+
+  useEffect(() => {
+    saveTimerStateRef.current = () => {
+      if (userId) {
+        let finalAccumulated = accumulatedTime;
+
+        if (startTime && isTimerActive) {
+          const currentSessionTime = Date.now() - startTime;
+          finalAccumulated += currentSessionTime;
+        }
+
+        const dataToSave = {
+          startTime: isTimerActive ? startTime : null,
+          isTimerActive,
+          currentEnigma,
+          accumulatedTime: finalAccumulated,
+          gameFinished,
+        };
+
+        console.log("💾 Sauvegarde:", dataToSave);
+        localStorage.setItem(`timer_${userId}`, JSON.stringify(dataToSave));
+
+        if (startTime && isTimerActive) {
+          const enigmaKey = `timer_${userId}_${currentEnigma}`;
+          const currentEnigmaTime = Date.now() - startTime;
+          localStorage.setItem(
+            enigmaKey,
+            JSON.stringify({
+              accumulatedTime: currentEnigmaTime,
+            })
+          );
+        }
+      }
+    };
+  }, [
+    userId,
+    startTime,
+    isTimerActive,
+    currentEnigma,
+    accumulatedTime,
+    gameFinished,
+  ]);
 
   const handleLogout = () => {
-    localStorage.removeItem('token');
-    localStorage.removeItem('userId');
-    // ✅ NE PAS SUPPRIMER timerStartTime - on le garde pour la reconnexion
-    setIsAuthenticated(false);
-    setCurrentEnigma(1);
-    setIsTimerActive(false);
-    setUserId(null); // ✅ RÉINITIALISATION
-  };
+    console.log("🚪 Déconnexion");
+    saveTimerStateRef.current();
 
-  const handleEnigmaComplete = () => {
-    const nextEnigma = currentEnigma + 1;
-    setCurrentEnigma(nextEnigma);
-    
-    if (nextEnigma > 5) {
-      setIsTimerActive(false);
-      // ✅ RÉCUPÉRER LE TEMPS AVEC userId
-      const savedTime = localStorage.getItem(`escapeGameTime_${userId}`);
-      if (savedTime) {
-        setFinalTime(parseInt(savedTime));
-      }
-      // ✅ SUPPRIMER LE TIMER QUAND TERMINÉ
-      localStorage.removeItem('timerStartTime');
+    try {
+      localStorage.removeItem("token");
+      localStorage.removeItem("refreshToken");
+    } catch (err) {
+      console.warn("Erreur lors de la déconnexion:", err);
     }
+
+    setToken(null);
+    setUserId(null);
+    setIsTimerActive(false);
+    setStartTime(null);
   };
 
-  const formatTime = (seconds) => {
-    const hours = Math.floor(seconds / 3600);
-    const minutes = Math.floor((seconds % 3600) / 60);
-    const secs = seconds % 60;
-    
-    return `${hours.toString().padStart(2, '0')}:${minutes
+  const goToNextEnigma = useCallback(() => {
+    console.log("🎯 Énigme terminée:", currentEnigma);
+
+    const enigmaTime = startTime ? Date.now() - startTime : 0;
+    const newAccumulatedTime = accumulatedTime + enigmaTime;
+
+    console.log("⏱️ Temps de l'énigme:", enigmaTime);
+    console.log("⏱️ Temps total accumulé:", newAccumulatedTime);
+
+    if (currentEnigma >= TOTAL_ENIGMES) {
+      console.log("🎉 Jeu terminé !");
+      setGameFinished(true);
+      setIsTimerActive(false);
+      setTotalTime(newAccumulatedTime);
+      setAccumulatedTime(newAccumulatedTime);
+
+      // 🎊 ANIMATION DE CONFETTIS 🎊
+      const duration = 5 * 1000;
+      const animationEnd = Date.now() + duration;
+      const defaults = {
+        startVelocity: 30,
+        spread: 360,
+        ticks: 60,
+        zIndex: 9999,
+      };
+
+      const randomInRange = (min, max) => Math.random() * (max - min) + min;
+
+      const interval = setInterval(() => {
+        const timeLeft = animationEnd - Date.now();
+
+        if (timeLeft <= 0) {
+          return clearInterval(interval);
+        }
+
+        const particleCount = 50 * (timeLeft / duration);
+
+        confetti({
+          ...defaults,
+          particleCount,
+          origin: { x: randomInRange(0.1, 0.3), y: Math.random() - 0.2 },
+        });
+
+        confetti({
+          ...defaults,
+          particleCount,
+          origin: { x: randomInRange(0.7, 0.9), y: Math.random() - 0.2 },
+        });
+      }, 250);
+
+      if (userId) {
+        localStorage.setItem(
+          `timer_${userId}`,
+          JSON.stringify({
+            startTime: null,
+            isTimerActive: false,
+            currentEnigma: TOTAL_ENIGMES,
+            accumulatedTime: newAccumulatedTime,
+            gameFinished: true,
+          })
+        );
+      }
+    } else {
+      const nextEnigma = currentEnigma + 1;
+      console.log("➡️ Passage à l'énigme", nextEnigma);
+
+      setCurrentEnigma(nextEnigma);
+      setAccumulatedTime(newAccumulatedTime);
+      setStartTime(Date.now());
+
+      if (userId) {
+        localStorage.setItem(
+          `timer_${userId}`,
+          JSON.stringify({
+            startTime: Date.now(),
+            isTimerActive: true,
+            currentEnigma: nextEnigma,
+            accumulatedTime: newAccumulatedTime,
+            gameFinished: false,
+          })
+        );
+      }
+    }
+  }, [currentEnigma, startTime, accumulatedTime, userId, TOTAL_ENIGMES]);
+
+  useEffect(() => {
+    if (userId && isTimerActive) {
+      const autoSaveInterval = setInterval(() => {
+        saveTimerStateRef.current();
+      }, 5000);
+
+      return () => clearInterval(autoSaveInterval);
+    }
+  }, [userId, isTimerActive]);
+
+  useEffect(() => {
+    const beforeUnload = () => {
+      console.log("💾 Sauvegarde avant fermeture");
+      saveTimerStateRef.current();
+    };
+    window.addEventListener("beforeunload", beforeUnload);
+    return () => window.removeEventListener("beforeunload", beforeUnload);
+  }, []);
+
+  const formatTime = (ms) => {
+    if (isNaN(ms) || ms < 0) return "00:00";
+    const totalSeconds = Math.floor(ms / 1000);
+    const minutes = Math.floor(totalSeconds / 60);
+    const seconds = totalSeconds % 60;
+    return `${minutes.toString().padStart(2, "0")}:${seconds
       .toString()
-      .padStart(2, '0')}:${secs.toString().padStart(2, '0')}`;
+      .padStart(2, "0")}`;
   };
 
-  // Styles responsives (inchangé...)
-  const headerStyle = {
-    background: 'rgba(0,0,0,0.2)',
-    padding: isMobile ? '8px 15px' : isTablet ? '10px 20px' : '12px 25px',
-    color: 'white',
-    display: 'flex',
-    flexDirection: isMobile ? 'column' : 'row',
-    justifyContent: 'space-between',
-    alignItems: 'center',
-    gap: isMobile ? '10px' : '0'
-  };
-
-  const buttonStyle = {
-    background: '#e53e3e',
-    color: 'white',
-    border: 'none',
-    padding: isMobile ? '8px 16px' : '10px 20px',
-    borderRadius: '5px',
-    cursor: 'pointer',
-    fontSize: isMobile ? '14px' : '16px',
-    width: isMobile ? '100%' : 'auto'
-  };
-
-  const congratsCardStyle = {
-    animation: 'fadeInScale 0.8s ease-out',
-    padding: isMobile ? '20px' : isTablet ? '30px' : '40px',
-    background: '#ffffff',
-    borderRadius: '15px',
-    boxShadow: '0 10px 30px rgba(0,0,0,0.15)'
-  };
-
-  const timeDisplayStyle = {
-    marginTop: isMobile ? '20px' : '30px',
-    padding: isMobile ? '15px' : '20px',
-    background: 'rgba(15, 30, 63, 0.1)',
-    borderRadius: '15px',
-    fontSize: isMobile ? '18px' : isTablet ? '20px' : '24px'
-  };
-
-  const finalTimeStyle = {
-    fontSize: isMobile ? '28px' : isTablet ? '32px' : '36px',
-    fontWeight: 'bold',
-    color: '#0f1e3f'
-  };
-
-  const loadingContainerStyle = {
-    minHeight: '100vh',
-    display: 'flex',
-    alignItems: 'center',
-    justifyContent: 'center',
-    background: 'linear-gradient(135deg, #667eea 0%, #764ba2 100%)',
-    padding: isMobile ? '20px' : isTablet ? '30px' : '40px'
-  };
-
-  const loadingTextStyle = {
-    fontSize: isMobile ? '24px' : '32px',
-    color: '#ffffff',
-    textAlign: 'center'
-  };
-
-  const congratsContainerStyle = {
-    minHeight: '100vh',
-    display: 'flex',
-    alignItems: 'center',
-    justifyContent: 'center',
-    background: 'linear-gradient(135deg, #667eea 0%, #764ba2 100%)',
-    padding: isMobile ? '15px' : isTablet ? '20px' : '30px'
-  };
-
-  if (loading) {
-    return (
-      <div style={loadingContainerStyle}>
-        <h1 style={loadingTextStyle}>
-          ⏳ Chargement...
-        </h1>
-      </div>
-    );
-  }
-
-  if (!isAuthenticated) {
+  if (!token || !userId) {
     return <Auth onLogin={handleLogin} />;
   }
 
+  const renderEnigma = () => {
+    switch (currentEnigma) {
+      case 1:
+        return <Enigme1 onComplete={goToNextEnigma} />;
+      case 2:
+        return <Enigme2 onComplete={goToNextEnigma} />;
+      case 3:
+        return <Enigme3 onComplete={goToNextEnigma} />;
+      case 4:
+        return <Enigme4 onComplete={goToNextEnigma} />;
+      case 5:
+        return <Enigme5 onComplete={goToNextEnigma} />;
+      default:
+        return <div>Énigme inconnue</div>;
+    }
+  };
+
   return (
-    <div>
-      {/* ✅ AJOUT DE userId ICI */}
-      {currentEnigma <= 5 && (
-        <Timer 
-          isActive={isTimerActive} 
+    <div
+      style={{
+        display: "flex",
+        height: "100vh",
+        overflow: "hidden",
+        background: "#f5f5f5",
+      }}
+    >
+      <aside
+        style={{
+          width: "320px",
+          background: "linear-gradient(135deg, #667eea 0%, #764ba2 100%)",
+          color: "white",
+          padding: "30px 20px",
+          display: "flex",
+          flexDirection: "column",
+          gap: "20px",
+          boxShadow: "4px 0 15px rgba(0,0,0,0.1)",
+          overflowY: "auto",
+        }}
+      >
+        <Timer
+          isActive={isTimerActive}
           startTime={startTime}
+          formatTime={formatTime}
           userId={userId}
+          enigmaId={currentEnigma}
+          accumulatedTime={accumulatedTime}
         />
-      )}
 
-      <div style={headerStyle}>
-        <div style={{ fontSize: isMobile ? '14px' : '16px' }}>
-          <strong>Énigme {currentEnigma} / 5</strong>
-        </div>
-        <button onClick={handleLogout} style={buttonStyle}>
-          Déconnexion
-        </button>
-      </div>
-
-      {currentEnigma === 1 && <Enigma1 onComplete={handleEnigmaComplete} />}
-      {currentEnigma === 2 && <Enigma2 onComplete={handleEnigmaComplete} />}
-      {currentEnigma === 3 && <Enigma3 onComplete={handleEnigmaComplete} />}
-      {currentEnigma === 4 && <Enigma4 onComplete={handleEnigmaComplete} />}
-      {currentEnigma === 5 && <Enigma5 onComplete={handleEnigmaComplete} />}
-      
-      {currentEnigma > 5 && (
-        <div style={congratsContainerStyle}>
-          <div style={congratsCardStyle}>
-            <h1 style={{ 
-              fontSize: isMobile ? '28px' : isTablet ? '36px' : '42px',
-              marginBottom: isMobile ? '15px' : '20px',
-              color: '#333'
-            }}>
-              🎉 Félicitations !
-            </h1>
-            <p style={{ 
-              fontSize: isMobile ? '16px' : isTablet ? '18px' : '20px',
-              color: '#666'
-            }}>
-              Vous avez terminé tous les défis de l'escape game !
-            </p>
-            
-            <div style={timeDisplayStyle}>
-              <div style={{ 
-                marginBottom: '10px', 
-                color: '#666',
-                fontSize: isMobile ? '14px' : '16px'
-              }}>
-                ⏱️ Temps total :
+        {!gameFinished ? (
+          <>
+            <div
+              style={{
+                background: "rgba(255,255,255,0.15)",
+                padding: "20px",
+                borderRadius: "15px",
+                backdropFilter: "blur(10px)",
+              }}
+            >
+              <h3 style={{ margin: "0 0 15px 0", fontSize: "18px" }}>
+                🎮 Progression
+              </h3>
+              <div
+                style={{
+                  fontSize: "32px",
+                  fontWeight: "bold",
+                  marginBottom: "10px",
+                }}
+              >
+                Énigme {currentEnigma}/{TOTAL_ENIGMES}
               </div>
-              <div style={finalTimeStyle}>
-                {formatTime(finalTime)}
+
+              <div
+                style={{
+                  background: "rgba(255,255,255,0.2)",
+                  height: "10px",
+                  borderRadius: "5px",
+                  overflow: "hidden",
+                  marginTop: "15px",
+                }}
+              >
+                <div
+                  style={{
+                    background: "#4ade80",
+                    height: "100%",
+                    width: `${Math.min(
+                      (currentEnigma / TOTAL_ENIGMES) * 100,
+                      100
+                    )}%`,
+                    transition: "width 0.3s ease",
+                  }}
+                ></div>
               </div>
             </div>
+
+            <div
+              style={{
+                background: "rgba(255,255,255,0.15)",
+                padding: "20px",
+                borderRadius: "15px",
+                backdropFilter: "blur(10px)",
+                fontSize: "14px",
+              }}
+            >
+              <h3 style={{ margin: "0 0 15px 0", fontSize: "16px" }}>
+                👤 Informations
+              </h3>
+              <p style={{ margin: "8px 0" }}>
+                <strong>ID:</strong> {userId}
+              </p>
+              <p style={{ margin: "8px 0" }}>
+                <strong>Session:</strong>
+                <br />
+                {startTime ? new Date(startTime).toLocaleTimeString() : "N/A"}
+              </p>
+              {accumulatedTime > 0 && (
+                <p style={{ margin: "8px 0" }}>
+                  <strong>Temps accumulé:</strong>
+                  <br />
+                  {formatTime(accumulatedTime)}
+                </p>
+              )}
+            </div>
+
+            <button
+              onClick={handleLogout}
+              style={{
+                padding: "15px",
+                fontSize: "16px",
+                background: "rgba(239, 68, 68, 0.9)",
+                color: "white",
+                border: "none",
+                borderRadius: "10px",
+                cursor: "pointer",
+                fontWeight: "bold",
+                transition: "all 0.3s ease",
+                marginTop: "auto",
+              }}
+              onMouseOver={(e) =>
+                (e.target.style.background = "rgba(220, 38, 38, 1)")
+              }
+              onMouseOut={(e) =>
+                (e.target.style.background = "rgba(239, 68, 68, 0.9)")
+              }
+            >
+              🚪 Déconnexion
+            </button>
+          </>
+        ) : (
+          <div
+            style={{
+              background: "rgba(255,255,255,0.15)",
+              padding: "30px 20px",
+              borderRadius: "15px",
+              backdropFilter: "blur(10px)",
+              textAlign: "center",
+              flex: 1,
+              display: "flex",
+              flexDirection: "column",
+              justifyContent: "center",
+            }}
+          >
+            <h2 style={{ fontSize: "32px", marginBottom: "20px" }}>
+              🎉 Terminé !
+            </h2>
+            <div
+              style={{
+                fontSize: "48px",
+                fontWeight: "bold",
+                margin: "20px 0",
+                color: "#4ade80",
+              }}
+            >
+              {formatTime(totalTime)}
+            </div>
+            <p style={{ fontSize: "14px", marginBottom: "30px" }}>
+              Temps total
+            </p>
+            <button
+              onClick={handleLogout}
+              style={{
+                padding: "15px",
+                fontSize: "16px",
+                background: "rgba(239, 68, 68, 0.9)",
+                color: "white",
+                border: "none",
+                borderRadius: "10px",
+                cursor: "pointer",
+                fontWeight: "bold",
+                marginTop: "auto",
+              }}
+            >
+              🚪 Déconnexion
+            </button>
           </div>
-        </div>
-      )}
+        )}
+      </aside>
 
-      <style>{`
-        * {
-          margin: 0;
-          padding: 0;
-          box-sizing: border-box;
-        }
-
-        body {
-          font-family: 'Inter', -apple-system, BlinkMacSystemFont, 'Segoe UI', sans-serif;
-        }
-
-        @keyframes fadeInScale {
-          0% {
-            opacity: 0;
-            transform: scale(0.8);
-          }
-          100% {
-            opacity: 1;
-            transform: scale(1);
-          }
-        }
-      `}</style>
+      <main
+        style={{
+          flex: 1,
+          display: "flex",
+          flexDirection: "column",
+          overflow: "hidden",
+          background: "#ffffff",
+        }}
+      >
+        {!gameFinished ? (
+          <div
+            style={{
+              width: "100%",
+              height: "100%",
+              overflow: "auto",
+            }}
+          >
+            {renderEnigma()}
+          </div>
+        ) : (
+          <div
+            style={{
+              display: "flex",
+              alignItems: "center",
+              justifyContent: "center",
+              height: "100%",
+              textAlign: "center",
+              padding: "40px",
+              background:
+                "linear-gradient(135deg, #667eea22 0%, #764ba222 100%)",
+            }}
+          >
+            <div>
+              <h1
+                style={{
+                  fontSize: "72px",
+                  margin: "0 0 30px 0",
+                  background:
+                    "linear-gradient(135deg, #667eea 0%, #764ba2 100%)",
+                  WebkitBackgroundClip: "text",
+                  WebkitTextFillColor: "transparent",
+                }}
+              >
+                🎉 Félicitations !
+              </h1>
+              <p
+                style={{
+                  fontSize: "24px",
+                  color: "#666",
+                  marginBottom: "20px",
+                }}
+              >
+                Vous avez terminé toutes les énigmes !
+              </p>
+              <p
+                style={{
+                  fontSize: "18px",
+                  color: "#999",
+                }}
+              >
+                Consultez votre temps total sur la gauche
+              </p>
+            </div>
+          </div>
+        )}
+      </main>
     </div>
   );
 }
