@@ -294,7 +294,7 @@ function Auth({ onLogin }) {
             value={password}
             onChange={(e) => setPassword(e.target.value)}
             required
-            minLength={6}
+            minLength={8}
             style={inputStyle}
             disabled={loading}
             autoComplete={isLogin ? "current-password" : "new-password"}
