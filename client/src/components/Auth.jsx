@@ -8,6 +8,7 @@ function Auth({ onLogin }) {
   const [isLogin, setIsLogin] = useState(true);
   const [loading, setLoading] = useState(false);
   const [error, setError] = useState("");
+  const minLengthValue = 8;
 
   const isMobile = useMediaQuery({ maxWidth: 767 });
   const isTablet = useMediaQuery({ minWidth: 768, maxWidth: 1023 });
@@ -290,11 +291,11 @@ function Auth({ onLogin }) {
 
           <input
             type="password"
-            placeholder="Mot de passe (min. 8 caractères)"
+            placeholder={`Mot de passe (min. ${minLengthValue} caractères)`}
             value={password}
             onChange={(e) => setPassword(e.target.value)}
             required
-            minLength={8}
+            minLength={minLengthValue}
             style={inputStyle}
             disabled={loading}
             autoComplete={isLogin ? "current-password" : "new-password"}
